@@ -1,0 +1,21 @@
+package com.tplink.oa.core.util.aspect;
+
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
+
+/**
+ * DefaultRetVal
+ * abstract: 方法默认返回值
+ * history:
+ * Created by mis_llg on 2017/1/12.
+ */
+@Target(ElementType.METHOD)
+@Retention(RetentionPolicy.RUNTIME)
+public @interface DefaultRetVal {
+	String type() default "String";
+	String retVal() default "";
+	Class[] throwExs() default {}; // 抛出的异常类型
+	int[] ignoreDmsExs() default {}; // 当抛出DMS异常时忽略的DMS异常
+}
