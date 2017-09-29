@@ -1,0 +1,119 @@
+package com.tplink.oa.core.util.aspect;
+
+import com.tplink.oa.core.util.base.Constant;
+import com.tplink.oa.core.util.dao.GenericDAO;
+import com.tplink.oa.core.util.dao.Page;
+import com.tplink.oa.core.util.exception.BusinessException;
+import com.tplink.oa.core.util.exception.DmsApiException;
+import org.apache.commons.lang3.ArrayUtils;
+import org.apache.commons.lang3.StringUtils;
+import org.aspectj.lang.JoinPoint;
+import org.aspectj.lang.ProceedingJoinPoint;
+import org.aspectj.lang.annotation.After;
+import org.aspectj.lang.annotation.Around;
+import org.aspectj.lang.annotation.Aspect;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
+
+import java.util.ArrayList;
+
+/**
+ * CommonAspect
+ * abstract: 通用切面
+ * history:
+ * Created by mis_llg on 2016/11/15.
+ */
+@Component
+@Aspect
+public class CommonAspect {
+	@Autowired
+	private GenericDAO genericDAO;
+
+	private static final Logger logger = LoggerFactory.getLogger(CommonAspect.class);
+
+	@After("@annotation(FlushSession)")
+	public void flushSession(JoinPoint jp) throws Throwable {
+		logger.debug("CommonAspect flushSession, {}.", jp.getSignature());
+		genericDAO.flushSession();
+	}
+
+	@Around("@annotation(defaultRetVal)")
+	public Object returnDefaultValue(ProceedingJoinPoint pjp, DefaultRetVal defaultRetVal) {
+		try {
+			return pjp.proceed();
+		} catch(DmsApiException dmsEx) {
+			logger.info("CommonAspect returnDefaultValue happen DmsApiException!", dmsEx);
+			return returnResult(defaultRetVal, dmsEx, DmsApiException.class, dmsEx.getCode());
+		} catch(BusinessException busEx) {
+			logger.info("CommonAspect returnDefaultValue happen BusinessException!", busEx);
+ 			return returnResult(defaultRetVal, busEx, BusinessException.class, null);
+		} catch(RuntimeException runEx) {
+			logger.info("CommonAspect returnDefaultValue happen BusinessException!", runEx);
+			return returnResult(defaultRetVal, runEx, RuntimeException.class, null);
+		} catch(Throwable throwable) {
+			logger.info("CommonAspect returnDefaultValue happen unknown error!", throwable);
+			return returnResult(defaultRetVal, null, null, null);
+		}
+	}
+
+	/**
+	 * 是否抛出异常，如果是DMS异常，根据捕获的DMS异常的code判别。如果code为空则抛出异常
+	 * @param defaultRetVal
+	 * @param code
+	 * @return
+	 */
+	private boolean isThrowEx(DefaultRetVal defaultRetVal, Integer code) {
+		if (code != null) {
+			return !ArrayUtils.contains(defaultRetVal.ignoreDmsExs(), code);
+		} else {
+			return true;
+		}
+	}
+
+	/**
+	 * 返回结果
+	 * @param defaultRetVal
+	 * @param runEx
+	 * @param cls
+	 * @param code
+	 * @return
+	 */
+	private Object returnResult(DefaultRetVal defaultRetVal, RuntimeException runEx, Class cls, Integer code) {
+		String type = defaultRetVal.type();
+		String retVal = defaultRetVal.retVal();
+		Class[] throwExs = defaultRetVal.throwExs();
+
+		if (throwExs.length > 0 && isExcludeEx(throwExs, cls) && isThrowEx(defaultRetVal, code)) {
+			throw runEx;
+		} else {
+			switch(type) {
+			case Constant.STRING: return Constant.NULL.equals(retVal) ? null : retVal;
+			case Constant.INT: return StringUtils.isNotBlank(retVal) ? Integer.parseInt(retVal) : 0;
+			case Constant.LONG: return StringUtils.isNotBlank(retVal) ? Long.parseLong(retVal) : 0L;
+			case Constant.DOUBLE: return StringUtils.isNotBlank(retVal) ? Double.parseDouble(retVal) : 0D;
+			case Constant.FLOAT: return StringUtils.isNotBlank(retVal) ? Float.parseFloat(retVal) : 0F;
+			case Constant.LIST: return new ArrayList<>();
+			case Constant.PAGE: return new Page();
+			default: return null;
+			}
+		}
+	}
+
+	/**
+	 * 是否是排除的不捕获异常
+	 * @param throwExs
+	 * @param cls
+	 * @return
+	 */
+	private boolean isExcludeEx(Class[] throwExs, Class cls) {
+		for(Class ecls : throwExs) {
+			if (ecls.equals(cls)) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+}
